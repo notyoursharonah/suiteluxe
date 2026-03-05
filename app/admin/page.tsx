@@ -26,6 +26,7 @@ export default function AdminDashboardPage() {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   useEffect(() => {
     const loadOrders = async () => {
@@ -71,6 +72,53 @@ export default function AdminDashboardPage() {
     loadOrders();
   }, []);
 
+  const todayStats = (() => {
+    const now = new Date();
+    const isToday = (iso: string) => {
+      const d = new Date(iso);
+      return (
+        d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate()
+      );
+    };
+
+    const todaysOrders = orders.filter((o) => isToday(o.created_at));
+    const revenue = todaysOrders.reduce(
+      (sum, o) => sum + Number(o.total || 0),
+      0
+    );
+    const count = todaysOrders.length;
+    const average = count > 0 ? revenue / count : 0;
+
+    return { revenue, count, average };
+  })();
+
+  const handleUpdateStatus = async (orderId: string, nextStatus: string) => {
+    try {
+      setUpdatingId(orderId);
+      const { error: updateError } = await supabase
+        .from("orders")
+        .update({ status: nextStatus })
+        .eq("id", orderId);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.id === orderId ? { ...order, status: nextStatus } : order
+        )
+      );
+    } catch (e) {
+      console.error("[SuiteLuxe] Failed to update order status:", e);
+      setError("Unable to update order status. Please try again.");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   return (
     <div
       className="min-h-screen px-4 py-6 sm:px-8 sm:py-8"
@@ -92,6 +140,53 @@ export default function AdminDashboardPage() {
       </header>
 
       <main className="mx-auto mt-8 w-full max-w-6xl">
+        {/* Revenue summary */}
+        <section className="grid gap-4 sm:grid-cols-3">
+          <div
+            className="rounded-2xl px-4 py-3"
+            style={{ backgroundColor: "#162233" }}
+          >
+            <p
+              className="text-lg font-semibold"
+              style={{ color: "#C9993F" }}
+            >
+              ${todayStats.revenue.toFixed(2)}
+            </p>
+            <p className="mt-1 text-xs font-medium uppercase tracking-[0.18em] text-white/70">
+              Today&apos;s Revenue
+            </p>
+          </div>
+          <div
+            className="rounded-2xl px-4 py-3"
+            style={{ backgroundColor: "#162233" }}
+          >
+            <p
+              className="text-lg font-semibold"
+              style={{ color: "#C9993F" }}
+            >
+              {todayStats.count}
+            </p>
+            <p className="mt-1 text-xs font-medium uppercase tracking-[0.18em] text-white/70">
+              Today&apos;s Orders
+            </p>
+          </div>
+          <div
+            className="rounded-2xl px-4 py-3"
+            style={{ backgroundColor: "#162233" }}
+          >
+            <p
+              className="text-lg font-semibold"
+              style={{ color: "#C9993F" }}
+            >
+              ${todayStats.average.toFixed(2)}
+            </p>
+            <p className="mt-1 text-xs font-medium uppercase tracking-[0.18em] text-white/70">
+              Avg Order Value
+            </p>
+          </div>
+        </section>
+
+        {/* States */}
         {loading && (
           <p className="text-sm text-white/70">Loading orders…</p>
         )}
@@ -164,6 +259,58 @@ export default function AdminDashboardPage() {
                       </li>
                     ))}
                   </ul>
+                </div>
+
+                {/* Status controls */}
+                <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-3">
+                  <div>
+                    {order.status === "pending" && (
+                      <span className="rounded-full bg-yellow-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-yellow-300">
+                        Pending
+                      </span>
+                    )}
+                    {order.status === "preparing" && (
+                      <span className="rounded-full bg-orange-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-orange-300">
+                        Preparing
+                      </span>
+                    )}
+                    {order.status === "delivered" && (
+                      <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                        Delivered
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    {order.status === "pending" && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleUpdateStatus(order.id, "preparing")
+                        }
+                        disabled={updatingId === order.id}
+                        className="rounded-full bg-white/5 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-white outline-none transition hover:bg-white/10 disabled:opacity-60"
+                      >
+                        {updatingId === order.id
+                          ? "Updating…"
+                          : "Mark Preparing"}
+                      </button>
+                    )}
+                    {order.status === "preparing" && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleUpdateStatus(order.id, "delivered")
+                        }
+                        disabled={updatingId === order.id}
+                        className="rounded-full bg-white/5 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-white outline-none transition hover:bg-white/10 disabled:opacity-60"
+                      >
+                        {updatingId === order.id
+                          ? "Updating…"
+                          : "Mark Delivered"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
