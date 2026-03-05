@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type AdminOrderItem = {
@@ -23,12 +24,21 @@ type AdminOrder = {
 };
 
 export default function AdminDashboardPage() {
+  const router = useRouter();
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const authed = localStorage.getItem("admin_authenticated");
+      if (authed !== "true") {
+        router.replace("/admin/login");
+        return;
+      }
+    }
+
     const loadOrders = async () => {
       setLoading(true);
       setError(null);
@@ -70,7 +80,7 @@ export default function AdminDashboardPage() {
     };
 
     loadOrders();
-  }, []);
+  }, [router]);
 
   const todayStats = (() => {
     const now = new Date();
@@ -124,19 +134,33 @@ export default function AdminDashboardPage() {
       className="min-h-screen px-4 py-6 sm:px-8 sm:py-8"
       style={{ backgroundColor: "#0D1B2A" }}
     >
-      <header className="mx-auto w-full max-w-6xl">
-        <h1
-          className="text-2xl font-normal text-white sm:text-3xl"
-          style={{ fontFamily: "Georgia, serif" }}
+      <header className="mx-auto flex w-full max-w-6xl items-center justify-between">
+        <div>
+          <h1
+            className="text-2xl font-normal text-white sm:text-3xl"
+            style={{ fontFamily: "Georgia, serif" }}
+          >
+            Admin Dashboard
+          </h1>
+          <p
+            className="mt-1 text-xs font-medium uppercase tracking-[0.25em]"
+            style={{ color: "#C9993F" }}
+          >
+            Live Orders
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof window !== "undefined") {
+              localStorage.removeItem("admin_authenticated");
+            }
+            router.replace("/admin/login");
+          }}
+          className="rounded-full border border-white/25 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-white outline-none transition hover:border-[#C9993F] hover:text-[#C9993F]"
         >
-          Admin Dashboard
-        </h1>
-        <p
-          className="mt-1 text-xs font-medium uppercase tracking-[0.25em]"
-          style={{ color: "#C9993F" }}
-        >
-          Live Orders
-        </p>
+          Sign Out
+        </button>
       </header>
 
       <main className="mx-auto mt-8 w-full max-w-6xl">
