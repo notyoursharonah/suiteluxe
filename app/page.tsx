@@ -2,31 +2,20 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
-
-function getSupabase(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) {
-    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY");
-  }
-  return createClient(url, key);
-}
-
-let supabaseSingleton: SupabaseClient | null = null;
-function supabase(): SupabaseClient {
-  if (!supabaseSingleton) supabaseSingleton = getSupabase();
-  return supabaseSingleton;
-}
+import { supabase } from "@/lib/supabase";
 
 export default function Home() {
   const router = useRouter();
   const [roomNumber, setRoomNumber] = useState("");
   const [lastName, setLastName] = useState("");
+  const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const db = useMemo(() => (typeof window !== "undefined" ? supabase() : null), []);
+  const db = useMemo(
+    () => (typeof window !== "undefined" ? supabase : null),
+    []
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -35,54 +24,43 @@ export default function Home() {
 
     const room = roomNumber.trim();
     const name = lastName.trim();
-
-    console.log("[SuiteLuxe] Login attempt:", { room, name });
+    const pinValue = pin.trim();
 
     if (!db) {
-      console.error("[SuiteLuxe] Supabase client not available (not in browser?)");
       setError("Room not found. Please check your details.");
       setLoading(false);
       return;
     }
 
     try {
-      const query = db
+      const { data, error: queryError } = await db
         .from("guest_sessions")
         .select("*")
         .eq("room_number", room)
         .eq("is_active", true)
         .ilike("guest_name", name);
 
-      console.log("[SuiteLuxe] Query params: room_number =", JSON.stringify(room), ", is_active = true, guest_name ilike", JSON.stringify(name));
-
-      const { data, error: queryError } = await query;
-
-      console.log("[SuiteLuxe] Query result - data:", data);
-      console.log("[SuiteLuxe] Query result - error:", queryError);
-      if (queryError) {
-        console.error("[SuiteLuxe] Supabase error details:", queryError.message, queryError.details, queryError.hint);
-      }
-
-      if (queryError) {
+      if (queryError || !data || data.length === 0) {
         setError("Room not found. Please check your details.");
         setLoading(false);
         return;
       }
 
-      if (!data || data.length === 0) {
-        setError("Room not found. Please check your details.");
+      const session = data[0] as { id: string; room_number: string; guest_name: string; hotel_id?: string; pin?: string };
+
+      if (!session.pin || session.pin !== pinValue) {
+        setError("Incorrect PIN. Please try again.");
         setLoading(false);
         return;
       }
 
-      const session = data[0];
       localStorage.setItem(
         "suiteluxe_guest_session",
         JSON.stringify({
           id: session.id,
           room_number: session.room_number,
           guest_name: session.guest_name,
-          hotel_id: (session as any).hotel_id ?? null,
+          hotel_id: session.hotel_id ?? null,
         })
       );
       router.push("/dashboard");
@@ -100,7 +78,6 @@ export default function Home() {
       style={{ backgroundColor: "#0D1B2A" }}
     >
       <div className="w-full max-w-sm text-center">
-        {/* Logo */}
         <h1
           className="text-5xl font-normal tracking-wide sm:text-6xl"
           style={{ fontFamily: "Georgia, serif" }}
@@ -151,6 +128,27 @@ export default function Home() {
               required
               className="w-full rounded border border-white/20 bg-white/5 px-4 py-3 text-white placeholder-white/40 outline-none transition focus:border-[#C9993F] focus:ring-1 focus:ring-[#C9993F]"
               placeholder="As on reservation"
+              disabled={loading}
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="pin"
+              className="mb-1.5 block text-left text-xs font-medium uppercase tracking-wider text-white/80"
+            >
+              PIN
+            </label>
+            <input
+              id="pin"
+              type="password"
+              inputMode="numeric"
+              maxLength={8}
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+              required
+              className="w-full rounded border border-white/20 bg-white/5 px-4 py-3 text-white placeholder-white/40 outline-none transition focus:border-[#C9993F] focus:ring-1 focus:ring-[#C9993F]"
+              placeholder="Provided at check-in"
               disabled={loading}
             />
           </div>

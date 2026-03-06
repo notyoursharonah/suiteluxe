@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 type ServiceOption = {
   id: string;
@@ -18,14 +19,73 @@ const SERVICE_OPTIONS: ServiceOption[] = [
   { id: "wake-up-call", label: "Wake Up Call", icon: "⏰" },
 ];
 
+type GuestSession = {
+  id: string;
+  room_number: string;
+  guest_name: string;
+  hotel_id?: string;
+};
+
 export default function ServicePage() {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!selectedId) return;
-    setSubmitted(true);
+
+    console.log("[SuiteLuxe] Service submit clicked with option:", selectedId);
+
+    setSaving(true);
+    setError(null);
+    setSubmitted(false);
+
+    try {
+      if (typeof window === "undefined") {
+        throw new Error("Not in browser");
+      }
+
+      const raw = localStorage.getItem("suiteluxe_guest_session");
+      if (!raw) {
+        throw new Error("Missing guest session");
+      }
+
+      const session: GuestSession = JSON.parse(raw);
+      console.log("[SuiteLuxe] Loaded guest session:", session);
+
+      const option = SERVICE_OPTIONS.find((o) => o.id === selectedId);
+      const requestType = option?.label ?? selectedId;
+      const payload = {
+        session_id: session.id,
+        hotel_id: (session as any).hotel_id ?? null,
+        room_number: session.room_number,
+        guest_name: session.guest_name,
+        request_type: requestType,
+        status: "pending",
+      };
+      console.log("[SuiteLuxe] Inserting service request payload:", payload);
+
+      const { data, error: insertError } = await supabase
+        .from("service_requests")
+        .insert(payload)
+        .select("*");
+
+      console.log("[SuiteLuxe] Insert result data:", data);
+      console.log("[SuiteLuxe] Insert result error:", insertError);
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      setSubmitted(true);
+    } catch (e) {
+      console.error("[SuiteLuxe] Failed to submit service request:", e);
+      setError("Order could not be placed. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -93,12 +153,16 @@ export default function ServicePage() {
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={!selectedId}
+          disabled={!selectedId || saving}
           className="w-full rounded-full px-6 py-2.5 text-center text-xs font-semibold uppercase tracking-[0.2em] text-[#0D1B2A] outline-none transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           style={{ backgroundColor: "#C9993F" }}
         >
-          Submit Request
+          {saving ? "Submitting…" : "Submit Request"}
         </button>
+
+        {error && (
+          <p className="mt-3 text-sm text-red-400">{error}</p>
+        )}
 
         {submitted && (
           <p className="mt-3 text-sm text-emerald-300">
