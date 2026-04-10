@@ -51,6 +51,16 @@ type MenuItem = {
   available: boolean;
 };
 
+type Promo = {
+  id: string;
+  label: string;
+  headline: string;
+  sub: string;
+  cta: string;
+  href: string;
+  active: boolean;
+};
+
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<AdminOrder[]>([]);
@@ -66,6 +76,10 @@ export default function AdminDashboardPage() {
   const [newItem, setNewItem] = useState({ name: "", description: "", price: "", category: "mains" });
   const [savingMenu, setSavingMenu] = useState(false);
   const [menuSuccess, setMenuSuccess] = useState<string | null>(null);
+  const [promo, setPromo] = useState<Promo | null>(null);
+  const [promoForm, setPromoForm] = useState<Partial<Promo>>({});
+  const [savingPromo, setSavingPromo] = useState(false);
+  const [promoSuccess, setPromoSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -79,7 +93,6 @@ export default function AdminDashboardPage() {
     const loadData = async () => {
       setLoading(true);
       setError(null);
-
       try {
         const [
           { data, error: queryError },
@@ -87,6 +100,7 @@ export default function AdminDashboardPage() {
           { data: staffData, error: staffError },
           { data: menuData, error: menuError },
           { data: hotelData },
+          { data: promoData },
         ] = await Promise.all([
           supabase.from("orders").select(`
             id, total, status, created_at,
@@ -97,6 +111,7 @@ export default function AdminDashboardPage() {
           supabase.from("staff").select("id, name, role").order("name"),
           supabase.from("menu_items").select("*").order("category"),
           supabase.from("hotels").select("id").limit(1).single(),
+          supabase.from("promos").select("*").limit(1).single(),
         ]);
 
         if (queryError) throw queryError;
@@ -109,6 +124,10 @@ export default function AdminDashboardPage() {
         setStaff((staffData as StaffMember[]) ?? []);
         setMenuItems((menuData as MenuItem[]) ?? []);
         setHotelId(hotelData?.id ?? null);
+        if (promoData) {
+          setPromo(promoData as Promo);
+          setPromoForm(promoData as Promo);
+        }
       } catch (e) {
         console.error("[SuiteLuxe] Failed to load admin data:", e);
         setError("Unable to load data. Please refresh.");
@@ -220,6 +239,27 @@ export default function AdminDashboardPage() {
       setTimeout(() => setMenuSuccess(null), 3000);
     }
     setSavingMenu(false);
+  };
+
+  const handleSavePromo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!promo) return;
+    setSavingPromo(true);
+    setPromoSuccess(null);
+    const { error } = await supabase.from("promos").update({
+      label: promoForm.label,
+      headline: promoForm.headline,
+      sub: promoForm.sub,
+      cta: promoForm.cta,
+      href: promoForm.href,
+      active: promoForm.active,
+    }).eq("id", promo.id);
+    if (!error) {
+      setPromo({ ...promo, ...promoForm } as Promo);
+      setPromoSuccess("Promo updated! Guests will see the new banner immediately.");
+      setTimeout(() => setPromoSuccess(null), 4000);
+    }
+    setSavingPromo(false);
   };
 
   const categories = [...new Set(menuItems.map((m) => m.category))];
@@ -361,17 +401,11 @@ export default function AdminDashboardPage() {
                           placeholder="Add a note…"
                           className="flex-1 rounded border border-white/20 bg-[#0D1B2A] px-3 py-1.5 text-sm text-white placeholder-white/30 outline-none focus:border-[#C9993F]"
                         />
-                        <button
-                          type="button"
-                          onClick={() => handleSaveNote(req.id)}
-                          className="rounded border border-white/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-white/70 transition hover:border-[#C9993F] hover:text-[#C9993F]"
-                        >
+                        <button type="button" onClick={() => handleSaveNote(req.id)} className="rounded border border-white/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-white/70 transition hover:border-[#C9993F] hover:text-[#C9993F]">
                           Save
                         </button>
                       </div>
-                      {req.notes && (
-                        <p className="mt-1 text-xs text-white/40">Saved: {req.notes}</p>
-                      )}
+                      {req.notes && <p className="mt-1 text-xs text-white/40">Saved: {req.notes}</p>}
                     </div>
                     <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-3">
                       <div>
@@ -380,12 +414,7 @@ export default function AdminDashboardPage() {
                         {req.status === "completed" && <span className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">Completed</span>}
                       </div>
                       {req.status !== "completed" && (
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateServiceStatus(req.id)}
-                          disabled={updatingServiceId === req.id}
-                          className="rounded-full bg-white/5 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-white outline-none transition hover:bg-white/10 disabled:opacity-60"
-                        >
+                        <button type="button" onClick={() => handleUpdateServiceStatus(req.id)} disabled={updatingServiceId === req.id} className="rounded-full bg-white/5 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-white outline-none transition hover:bg-white/10 disabled:opacity-60">
                           {updatingServiceId === req.id ? "Updating…" : "Advance Status"}
                         </button>
                       )}
@@ -400,87 +429,40 @@ export default function AdminDashboardPage() {
         {/* Menu Management */}
         <section className="mt-10">
           <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-white/70">Menu Management</h2>
-
-          {/* Add new item */}
           <div className="mt-4 rounded-2xl bg-[#162233] p-5">
             <h3 className="mb-4 text-sm font-semibold text-white">Add New Item</h3>
             <form onSubmit={handleAddMenuItem} className="grid gap-3 sm:grid-cols-2">
-              <input
-                type="text"
-                value={newItem.name}
-                onChange={(e) => setNewItem((prev) => ({ ...prev, name: e.target.value }))}
-                required
-                placeholder="Item name"
-                className="rounded border border-white/20 bg-[#0D1B2A] px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-[#C9993F]"
-              />
-              <input
-                type="text"
-                value={newItem.description}
-                onChange={(e) => setNewItem((prev) => ({ ...prev, description: e.target.value }))}
-                placeholder="Description"
-                className="rounded border border-white/20 bg-[#0D1B2A] px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-[#C9993F]"
-              />
-              <input
-                type="number"
-                value={newItem.price}
-                onChange={(e) => setNewItem((prev) => ({ ...prev, price: e.target.value }))}
-                required
-                placeholder="Price e.g. 18.00"
-                step="0.01"
-                min="0"
-                className="rounded border border-white/20 bg-[#0D1B2A] px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-[#C9993F]"
-              />
-              <select
-                value={newItem.category}
-                onChange={(e) => setNewItem((prev) => ({ ...prev, category: e.target.value }))}
-                className="rounded border border-white/20 bg-[#0D1B2A] px-3 py-2 text-sm text-white outline-none focus:border-[#C9993F]"
-              >
+              <input type="text" value={newItem.name} onChange={(e) => setNewItem((prev) => ({ ...prev, name: e.target.value }))} required placeholder="Item name" className="rounded border border-white/20 bg-[#0D1B2A] px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-[#C9993F]" />
+              <input type="text" value={newItem.description} onChange={(e) => setNewItem((prev) => ({ ...prev, description: e.target.value }))} placeholder="Description" className="rounded border border-white/20 bg-[#0D1B2A] px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-[#C9993F]" />
+              <input type="number" value={newItem.price} onChange={(e) => setNewItem((prev) => ({ ...prev, price: e.target.value }))} required placeholder="Price e.g. 18.00" step="0.01" min="0" className="rounded border border-white/20 bg-[#0D1B2A] px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-[#C9993F]" />
+              <select value={newItem.category} onChange={(e) => setNewItem((prev) => ({ ...prev, category: e.target.value }))} className="rounded border border-white/20 bg-[#0D1B2A] px-3 py-2 text-sm text-white outline-none focus:border-[#C9993F]">
                 <option value="breakfast">Breakfast</option>
                 <option value="mains">Mains</option>
                 <option value="desserts">Desserts</option>
                 <option value="drinks">Drinks</option>
               </select>
-              <button
-                type="submit"
-                disabled={savingMenu}
-                className="sm:col-span-2 rounded-full px-4 py-2 text-sm font-semibold uppercase tracking-wider text-[#0D1B2A] transition hover:opacity-95 disabled:opacity-60"
-                style={{ backgroundColor: "#C9993F" }}
-              >
+              <button type="submit" disabled={savingMenu} className="sm:col-span-2 rounded-full px-4 py-2 text-sm font-semibold uppercase tracking-wider text-[#0D1B2A] transition hover:opacity-95 disabled:opacity-60" style={{ backgroundColor: "#C9993F" }}>
                 {savingMenu ? "Adding…" : "Add to Menu"}
               </button>
               {menuSuccess && <p className="sm:col-span-2 text-sm text-emerald-300">{menuSuccess}</p>}
             </form>
           </div>
-
-          {/* Existing items */}
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             {categories.map((category) => (
               <div key={category} className="rounded-2xl bg-[#162233] p-5">
-                <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.25em]" style={{ color: "#C9993F" }}>
-                  {category}
-                </h3>
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.25em]" style={{ color: "#C9993F" }}>{category}</h3>
                 <ul className="space-y-3">
                   {menuItems.filter((m) => m.category === category).map((item) => (
                     <li key={item.id} className="flex items-center justify-between gap-3 text-sm text-white">
                       <div className="flex-1">
-                        <p className={item.available ? "font-medium" : "font-medium text-white/40 line-through"}>
-                          {item.name}
-                        </p>
+                        <p className={item.available ? "font-medium" : "font-medium text-white/40 line-through"}>{item.name}</p>
                         <p className="text-xs text-white/50">${item.price}</p>
                       </div>
                       <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleAvailable(item)}
-                          className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider transition ${item.available ? "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30" : "bg-white/10 text-white/50 hover:bg-white/20"}`}
-                        >
+                        <button type="button" onClick={() => handleToggleAvailable(item)} className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider transition ${item.available ? "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30" : "bg-white/10 text-white/50 hover:bg-white/20"}`}>
                           {item.available ? "Live" : "Off"}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteMenuItem(item.id)}
-                          className="rounded-full bg-red-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-red-300 transition hover:bg-red-500/30"
-                        >
+                        <button type="button" onClick={() => handleDeleteMenuItem(item.id)} className="rounded-full bg-red-500/20 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-red-300 transition hover:bg-red-500/30">
                           Delete
                         </button>
                       </div>
@@ -489,6 +471,92 @@ export default function AdminDashboardPage() {
                 </ul>
               </div>
             ))}
+          </div>
+        </section>
+
+        {/* Promo Banner Editor */}
+        <section className="mt-10">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-white/70">Promo Banner</h2>
+          <p className="mt-1 text-xs text-white/40">Changes appear instantly on the guest dashboard.</p>
+          <div className="mt-4 rounded-2xl bg-[#162233] p-5">
+            <form onSubmit={handleSavePromo} className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-white/50">Label</label>
+                  <input
+                    type="text"
+                    value={promoForm.label ?? ""}
+                    onChange={(e) => setPromoForm((prev) => ({ ...prev, label: e.target.value }))}
+                    placeholder="e.g. Limited Time Offer"
+                    className="w-full rounded border border-white/20 bg-[#0D1B2A] px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-[#C9993F]"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-white/50">Headline</label>
+                  <input
+                    type="text"
+                    value={promoForm.headline ?? ""}
+                    onChange={(e) => setPromoForm((prev) => ({ ...prev, headline: e.target.value }))}
+                    placeholder="e.g. 20% Off Spa Treatments"
+                    className="w-full rounded border border-white/20 bg-[#0D1B2A] px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-[#C9993F]"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-white/50">Description</label>
+                <input
+                  type="text"
+                  value={promoForm.sub ?? ""}
+                  onChange={(e) => setPromoForm((prev) => ({ ...prev, sub: e.target.value }))}
+                  placeholder="e.g. Book any treatment this week and save."
+                  className="w-full rounded border border-white/20 bg-[#0D1B2A] px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-[#C9993F]"
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-white/50">Button Text</label>
+                  <input
+                    type="text"
+                    value={promoForm.cta ?? ""}
+                    onChange={(e) => setPromoForm((prev) => ({ ...prev, cta: e.target.value }))}
+                    placeholder="e.g. Book Now"
+                    className="w-full rounded border border-white/20 bg-[#0D1B2A] px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-[#C9993F]"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-white/50">Button Link</label>
+                  <select
+                    value={promoForm.href ?? "/spa"}
+                    onChange={(e) => setPromoForm((prev) => ({ ...prev, href: e.target.value }))}
+                    className="w-full rounded border border-white/20 bg-[#0D1B2A] px-3 py-2 text-sm text-white outline-none focus:border-[#C9993F]"
+                  >
+                    <option value="/spa">Spa</option>
+                    <option value="/dining">Dining</option>
+                    <option value="/upgrade">Upgrade</option>
+                    <option value="/service">Service</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="promo-active"
+                  checked={promoForm.active ?? true}
+                  onChange={(e) => setPromoForm((prev) => ({ ...prev, active: e.target.checked }))}
+                  className="h-4 w-4 accent-[#C9993F]"
+                />
+                <label htmlFor="promo-active" className="text-sm text-white/70">Show banner to guests</label>
+              </div>
+              <button
+                type="submit"
+                disabled={savingPromo}
+                className="w-full rounded-full px-4 py-2.5 text-sm font-semibold uppercase tracking-wider text-[#0D1B2A] transition hover:opacity-95 disabled:opacity-60"
+                style={{ backgroundColor: "#C9993F" }}
+              >
+                {savingPromo ? "Saving…" : "Save Promo"}
+              </button>
+              {promoSuccess && <p className="text-sm text-emerald-300">{promoSuccess}</p>}
+            </form>
           </div>
         </section>
       </main>

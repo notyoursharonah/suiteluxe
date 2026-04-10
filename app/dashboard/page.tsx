@@ -2,10 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 type GuestSession = {
   room_number: string;
   guest_name: string;
+};
+
+type Promo = {
+  id: string;
+  label: string;
+  headline: string;
+  sub: string;
+  cta: string;
+  href: string;
+  active: boolean;
 };
 
 const NAV_ITEMS = [
@@ -15,17 +26,10 @@ const NAV_ITEMS = [
   { key: "upgrade", title: "Upgrade Stay", description: "Room upgrades & perks", icon: "⭐" },
 ];
 
-const PROMO = {
-  label: "Limited Time Offer",
-  headline: "20% Off Spa Treatments",
-  sub: "Book any treatment this week and save. Use code LUXE20 at the spa.",
-  cta: "Book Now",
-  href: "/spa",
-};
-
 export default function DashboardPage() {
   const router = useRouter();
   const [session, setSession] = useState<GuestSession | null>(null);
+  const [promo, setPromo] = useState<Promo | null>(null);
 
   useEffect(() => {
     const raw = typeof window !== "undefined" ? localStorage.getItem("suiteluxe_guest_session") : null;
@@ -35,6 +39,19 @@ export default function DashboardPage() {
       setSession({ room_number: data.room_number, guest_name: data.guest_name });
     } catch { router.replace("/"); }
   }, [router]);
+
+  useEffect(() => {
+    const loadPromo = async () => {
+      const { data } = await supabase
+        .from("promos")
+        .select("*")
+        .eq("active", true)
+        .limit(1)
+        .single();
+      if (data) setPromo(data as Promo);
+    };
+    loadPromo();
+  }, []);
 
   const handleSignOut = () => {
     if (typeof window !== "undefined") localStorage.removeItem("suiteluxe_guest_session");
@@ -65,48 +82,47 @@ export default function DashboardPage() {
       <main className="mx-auto mt-8 w-full max-w-5xl flex-1 space-y-8">
 
         {/* Promo banner */}
-        <section
-          className="relative overflow-hidden rounded-2xl p-6 sm:p-7"
-          style={{
-            background: "linear-gradient(135deg, #1e1506 0%, #2a1f08 50%, #1a1208 100%)",
-            border: "1px solid rgba(201,153,63,0.4)",
-          }}
-        >
-          {/* Glow */}
-          <div
-            className="pointer-events-none absolute -top-10 -right-10 h-48 w-48 rounded-full opacity-20"
-            style={{ background: "radial-gradient(circle, #C9993F 0%, transparent 70%)" }}
-          />
-          {/* Corner marks */}
-          <div className="absolute top-3 right-3 h-4 w-4">
-            <div className="absolute top-0 right-0 h-full w-px" style={{ backgroundColor: "#C9993F", opacity: 0.7 }} />
-            <div className="absolute top-0 right-0 h-px w-full" style={{ backgroundColor: "#C9993F", opacity: 0.7 }} />
-          </div>
-          <div className="absolute bottom-3 left-3 h-4 w-4">
-            <div className="absolute bottom-0 left-0 h-full w-px" style={{ backgroundColor: "#C9993F", opacity: 0.7 }} />
-            <div className="absolute bottom-0 left-0 h-px w-full" style={{ backgroundColor: "#C9993F", opacity: 0.7 }} />
-          </div>
-
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.4em]" style={{ color: "#C9993F" }}>
-                ✦ &nbsp;{PROMO.label}
-              </p>
-              <h2 className="mt-2 text-2xl font-light text-white sm:text-3xl" style={{ fontFamily: "Georgia, serif" }}>
-                {PROMO.headline}
-              </h2>
-              <p className="mt-2 max-w-md text-sm text-white/50">{PROMO.sub}</p>
+        {promo && (
+          <section
+            className="relative overflow-hidden rounded-2xl p-6 sm:p-7"
+            style={{
+              background: "linear-gradient(135deg, #1e1506 0%, #2a1f08 50%, #1a1208 100%)",
+              border: "1px solid rgba(201,153,63,0.4)",
+            }}
+          >
+            <div
+              className="pointer-events-none absolute -top-10 -right-10 h-48 w-48 rounded-full opacity-20"
+              style={{ background: "radial-gradient(circle, #C9993F 0%, transparent 70%)" }}
+            />
+            <div className="absolute top-3 right-3 h-4 w-4">
+              <div className="absolute top-0 right-0 h-full w-px" style={{ backgroundColor: "#C9993F", opacity: 0.7 }} />
+              <div className="absolute top-0 right-0 h-px w-full" style={{ backgroundColor: "#C9993F", opacity: 0.7 }} />
             </div>
-            <button
-              type="button"
-              onClick={() => router.push(PROMO.href)}
-              className="shrink-0 rounded-full px-6 py-3 text-xs font-semibold uppercase tracking-widest text-[#0D1B2A] transition hover:opacity-90"
-              style={{ backgroundColor: "#C9993F" }}
-            >
-              {PROMO.cta}
-            </button>
-          </div>
-        </section>
+            <div className="absolute bottom-3 left-3 h-4 w-4">
+              <div className="absolute bottom-0 left-0 h-full w-px" style={{ backgroundColor: "#C9993F", opacity: 0.7 }} />
+              <div className="absolute bottom-0 left-0 h-px w-full" style={{ backgroundColor: "#C9993F", opacity: 0.7 }} />
+            </div>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.4em]" style={{ color: "#C9993F" }}>
+                  ✦ &nbsp;{promo.label}
+                </p>
+                <h2 className="mt-2 text-2xl font-light text-white sm:text-3xl" style={{ fontFamily: "Georgia, serif" }}>
+                  {promo.headline}
+                </h2>
+                <p className="mt-2 max-w-md text-sm text-white/50">{promo.sub}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => router.push(promo.href)}
+                className="shrink-0 rounded-full px-6 py-3 text-xs font-semibold uppercase tracking-widest text-[#0D1B2A] transition hover:opacity-90"
+                style={{ backgroundColor: "#C9993F" }}
+              >
+                {promo.cta}
+              </button>
+            </div>
+          </section>
+        )}
 
         {/* Tiles */}
         <div className="grid w-full gap-6 sm:grid-cols-2">
