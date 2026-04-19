@@ -110,8 +110,8 @@ export default function AdminDashboardPage() {
           supabase.from("service_requests").select("*").order("created_at", { ascending: false }),
           supabase.from("staff").select("id, name, role").order("name"),
           supabase.from("menu_items").select("*").order("category"),
-          supabase.from("hotels").select("id").limit(1).single(),
-          supabase.from("promos").select("*").limit(1).single(),
+          supabase.from("hotels").select("id").limit(1).maybeSingle(),
+          supabase.from("promos").select("*").limit(1).maybeSingle(),
         ]);
 
         if (queryError) throw queryError;
